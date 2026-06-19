@@ -1,0 +1,180 @@
+import kagglehub
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+from pathlib import Path
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+
+path = kagglehub.dataset_download("adrianmcmahon/imdb-india-movies")
+
+csv_file = list(Path(path).glob("*.csv"))[0]
+
+data = pd.read_csv(csv_file, encoding="latin1")
+
+data["Year"] = data["Year"].astype(str).str.extract(r"(\d{4})")
+data["Year"] = pd.to_numeric(data["Year"], errors="coerce")
+
+data["Duration"] = data["Duration"].astype(str).str.replace(" min", "")
+data["Duration"] = pd.to_numeric(data["Duration"], errors="coerce")
+
+data["Votes"] = data["Votes"].astype(str).str.replace(",", "")
+data["Votes"] = pd.to_numeric(data["Votes"], errors="coerce")
+
+data = data.dropna()
+
+original_data = data.copy()
+
+label = LabelEncoder()
+
+for col in ["Genre", "Director", "Actor 1", "Actor 2", "Actor 3"]:
+    data[col] = label.fit_transform(data[col])
+
+X = data.drop(["Name", "Rating"], axis=1)
+y = data["Rating"]
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X,
+    y,
+    test_size=0.2,
+    random_state=42
+)
+
+model = RandomForestRegressor(
+    n_estimators=200,
+    random_state=42
+)
+
+model.fit(X_train, y_train)
+
+predictions = model.predict(X_test)
+
+print("=" * 50)
+print("MOVIE RATING PREDICTION RESULTS")
+print("=" * 50)
+
+print("\nR2 Score:")
+print(round(r2_score(y_test, predictions), 4))
+
+print("\nMean Absolute Error:")
+print(round(mean_absolute_error(y_test, predictions), 4))
+
+print("\nRoot Mean Squared Error:")
+print(round(np.sqrt(mean_squared_error(y_test, predictions)), 4))
+
+plt.figure(figsize=(8,6))
+sns.histplot(original_data["Rating"], bins=20, kde=True)
+plt.title("Distribution of Movie Ratings")
+plt.xlabel("Rating")
+plt.ylabel("Count")
+plt.show()
+
+plt.figure(figsize=(8,6))
+sns.scatterplot(
+    x=y_test,
+    y=predictions
+)
+plt.title("Actual vs Predicted Ratings")
+plt.xlabel("Actual Rating")
+plt.ylabel("Predicted Rating")
+plt.show()
+
+top_directors = (
+    original_data.groupby("Director")["Rating"]
+    .mean()
+    .sort_values(ascending=False)
+    .head(10)
+)
+
+plt.figure(figsize=(12,6))
+sns.barplot(
+    x=top_directors.values,
+    y=top_directors.index
+)
+plt.title("Top 10 Directors by Average Rating")
+plt.xlabel("Average Rating")
+plt.show()
+
+top_genres = (
+    original_data.groupby("Genre")["Rating"]
+    .mean()
+    .sort_values(ascending=False)
+    .head(10)
+)
+
+plt.figure(figsize=(12,6))
+sns.barplot(
+    x=top_genres.values,
+    y=top_genres.index
+)
+plt.title("Top Genres by Average Rating")
+plt.xlabel("Average Rating")
+plt.show()
+
+year_rating = (
+    original_data.groupby("Year")["Rating"]
+    .mean()
+)
+
+plt.figure(figsize=(12,6))
+plt.plot(
+    year_rating.index,
+    year_rating.values,
+    marker="o"
+)
+plt.title("Average Movie Rating Over the Years")
+plt.xlabel("Year")
+plt.ylabel("Average Rating")
+plt.grid(True)
+plt.show()
+
+plt.figure(figsize=(10,8))
+sns.heatmap(
+    data.select_dtypes(include=["int64", "float64"]).corr(),
+    annot=True
+)
+plt.title("Correlation Heatmap")
+plt.show()
+
+importance = pd.DataFrame({
+    "Feature": X.columns,
+    "Importance": model.feature_importances_
+})
+
+importance = importance.sort_values(
+    by="Importance",
+    ascending=False
+)
+
+print("\nFeature Importance")
+print(importance)
+
+plt.figure(figsize=(10,6))
+sns.barplot(
+    data=importance,
+    x="Importance",
+    y="Feature"
+)
+plt.title("Feature Importance")
+plt.show()
+
+top_movies = (
+    original_data.sort_values(
+        by="Rating",
+        ascending=False
+    )
+    .head(15)
+)
+
+plt.figure(figsize=(12,8))
+sns.barplot(
+    x="Rating",
+    y="Name",
+    data=top_movies
+)
+plt.title("Top 15 Highest Rated Movies")
+plt.show()
