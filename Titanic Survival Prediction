@@ -1,0 +1,105 @@
+import kagglehub
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+from pathlib import Path
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+
+path = kagglehub.dataset_download("yasserh/titanic-dataset")
+
+print("Dataset Path:", path)
+
+csv_file = list(Path(path).glob("*.csv"))[0]
+
+data = pd.read_csv(csv_file)
+
+print(data.head())
+print("\nDataset Shape:")
+print(data.shape)
+
+print("\nMissing Values:")
+print(data.isnull().sum())
+
+data["Age"] = data["Age"].fillna(data["Age"].median())
+data["Embarked"] = data["Embarked"].fillna(data["Embarked"].mode()[0])
+
+if "Cabin" in data.columns:
+    data.drop("Cabin", axis=1, inplace=True)
+
+data["FamilySize"] = data["SibSp"] + data["Parch"] + 1
+
+encoder = LabelEncoder()
+
+data["Sex"] = encoder.fit_transform(data["Sex"])
+data["Embarked"] = encoder.fit_transform(data["Embarked"])
+
+data.drop(["PassengerId", "Name", "Ticket"], axis=1, inplace=True)
+
+plt.figure(figsize=(6, 4))
+sns.countplot(x="Survived", data=data)
+plt.title("Survival Distribution")
+plt.show()
+
+plt.figure(figsize=(6, 4))
+sns.countplot(x="Sex", hue="Survived", data=data)
+plt.title("Survival by Gender")
+plt.show()
+
+plt.figure(figsize=(6, 4))
+sns.countplot(x="Pclass", hue="Survived", data=data)
+plt.title("Survival by Passenger Class")
+plt.show()
+
+X = data.drop("Survived", axis=1)
+y = data["Survived"]
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X,
+    y,
+    test_size=0.2,
+    random_state=42
+)
+
+model = RandomForestClassifier(
+    n_estimators=100,
+    random_state=42
+)
+
+model.fit(X_train, y_train)
+
+predictions = model.predict(X_test)
+
+print("\nAccuracy Score:")
+print(round(accuracy_score(y_test, predictions) * 100, 2), "%")
+
+print("\nClassification Report:")
+print(classification_report(y_test, predictions))
+
+print("\nConfusion Matrix:")
+print(confusion_matrix(y_test, predictions))
+
+importance = pd.DataFrame({
+    "Feature": X.columns,
+    "Importance": model.feature_importances_
+})
+
+importance = importance.sort_values(
+    by="Importance",
+    ascending=False
+)
+
+print("\nFeature Importance:")
+print(importance)
+
+plt.figure(figsize=(8, 5))
+sns.barplot(
+    data=importance,
+    x="Importance",
+    y="Feature"
+)
+plt.title("Feature Importance")
+plt.show()
