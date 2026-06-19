@@ -1,0 +1,168 @@
+import kagglehub
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+from pathlib import Path
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import (
+    accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
+    confusion_matrix,
+    classification_report
+)
+
+from imblearn.over_sampling import SMOTE
+
+path = kagglehub.dataset_download("mlg-ulb/creditcardfraud")
+
+csv_file = list(Path(path).glob("*.csv"))[0]
+
+data = pd.read_csv(csv_file)
+
+print("Dataset Shape:")
+print(data.shape)
+
+print("\nMissing Values:")
+print(data.isnull().sum())
+
+plt.figure(figsize=(6,6))
+data["Class"].value_counts().plot(
+    kind="pie",
+    autopct="%1.2f%%"
+)
+plt.title("Fraud vs Genuine Transactions")
+plt.ylabel("")
+plt.show()
+
+plt.figure(figsize=(10,6))
+sns.histplot(
+    data["Amount"],
+    bins=50,
+    kde=True
+)
+plt.title("Transaction Amount Distribution")
+plt.show()
+
+plt.figure(figsize=(10,6))
+sns.boxplot(
+    x="Class",
+    y="Amount",
+    data=data
+)
+plt.title("Fraud vs Genuine Transaction Amounts")
+plt.show()
+
+data["Amount"] = StandardScaler().fit_transform(
+    data["Amount"].values.reshape(-1,1)
+)
+
+X = data.drop("Class", axis=1)
+y = data["Class"]
+
+smote = SMOTE(random_state=42)
+
+X_resampled, y_resampled = smote.fit_resample(X, y)
+
+print("\nClass Distribution After SMOTE:")
+print(pd.Series(y_resampled).value_counts())
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X_resampled,
+    y_resampled,
+    test_size=0.2,
+    random_state=42
+)
+
+model = RandomForestClassifier(
+    n_estimators=200,
+    random_state=42
+)
+
+model.fit(X_train, y_train)
+
+predictions = model.predict(X_test)
+
+accuracy = accuracy_score(y_test, predictions)
+precision = precision_score(y_test, predictions)
+recall = recall_score(y_test, predictions)
+f1 = f1_score(y_test, predictions)
+
+print("\nAccuracy:", accuracy)
+print("Precision:", precision)
+print("Recall:", recall)
+print("F1 Score:", f1)
+
+print("\nClassification Report")
+print(classification_report(y_test, predictions))
+
+cm = confusion_matrix(y_test, predictions)
+
+plt.figure(figsize=(6,5))
+sns.heatmap(
+    cm,
+    annot=True,
+    fmt="d"
+)
+plt.title("Confusion Matrix")
+plt.xlabel("Predicted")
+plt.ylabel("Actual")
+plt.show()
+
+metrics = pd.DataFrame({
+    "Metric":["Precision","Recall","F1 Score"],
+    "Score":[precision, recall, f1]
+})
+
+plt.figure(figsize=(8,5))
+sns.barplot(
+    data=metrics,
+    x="Metric",
+    y="Score"
+)
+plt.title("Model Performance Metrics")
+plt.ylim(0,1)
+plt.show()
+
+importance = pd.DataFrame({
+    "Feature": X.columns,
+    "Importance": model.feature_importances_
+})
+
+importance = importance.sort_values(
+    by="Importance",
+    ascending=False
+).head(15)
+
+plt.figure(figsize=(10,6))
+sns.barplot(
+    data=importance,
+    x="Importance",
+    y="Feature"
+)
+plt.title("Top 15 Features Influencing Fraud Detection")
+plt.show()
+
+fraud_data = data[data["Class"] == 1]
+
+plt.figure(figsize=(12,6))
+sns.histplot(
+    fraud_data["Time"],
+    bins=50
+)
+plt.title("Fraud Transactions Over Time")
+plt.xlabel("Time")
+plt.show()
+
+plt.figure(figsize=(12,8))
+sns.heatmap(
+    data.corr(),
+    cmap="coolwarm"
+)
+plt.title("Feature Correlation Heatmap")
+plt.show()
